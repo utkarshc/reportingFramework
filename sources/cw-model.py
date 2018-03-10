@@ -1,7 +1,8 @@
 import boto3
 import datetime
-import numpy
 import matplotlib.pyplot as plt
+import argparse
+import sys
 
 DIM_ENV_NAME="environment";
 DIM_ENV_VALUE="infra.mindtickle.com";
@@ -109,6 +110,8 @@ def generateSuccessPercentageStats(okStatusStats, clErrStatusStats, svErrStatusS
     allStats = sortByTimeDatapoints(allStats);
 
     idx = -1;
+    totalOk = 0.0;
+    totalFail = 0.0;
     while idx+1 < len(allStats) :
         idx += 1;
         currTime = allStats[idx]["Timestamp"];
@@ -132,11 +135,40 @@ def generateSuccessPercentageStats(okStatusStats, clErrStatusStats, svErrStatusS
             yes.append(0.0);
         else :
             yes.append(okCount / (okCount + errCount));
-    return {"x" : xes, "y" : yes};
+        totalFail += errCount;
+        totalOk += okCount;
 
+    if(totalOk == 0.0) :
+        avg = 0.0;
+    else  :
+        avg = totalOk / (totalOk + totalFail)
+    return {"x" : xes, "y" : yes, "avg" : avg};
+
+def getCommandLineArgs() :
+    parser = argparse.ArgumentParser();
+    parser.add_argument("--caller", help="The engine for which you want to generate logs. Default : game_engine", default="game_engine", choices=["game_engine","content_engine"]);
+    parser.add_argument("--days", help="last n days for which we want the graphs. Default : 1", default=1, type=int, choices=[1,2,3,4,5,6,7]);
+    parser.add_argument("--env", help="environment variable that is given on cloudwatch", required=True);
+    parser.add_argument("--add_to_s3", help="do you want to upload the graphs to s3", dest='addS3', action='store_true');
+    parser.set_defaults(addS3=False)
+    parser.add_argument("--send_mail", help="do you want to send the mail", dest='sendMail', action='store_true');
+    parser.set_defaults(sendMail=False)
+    parser.add_argument("--mailid", help="email id where to send");
+    args = parser.parse_args();
+    if args.sendMail and args.mailid == None:
+        parser.print_help();
+        sys.exit();
+    return args;
+
+def getFileNameToSave(caller, datetime) :
+    return caller + str(datetime) + ".png"
 
 if __name__ == "__main__":
-    cwModel = CwModel("infra_metric", "game_engine");
+    args = getCommandLineArgs();
+    DAYS_REPORT = args.days;
+    DIM_ENV_VALUE = args.env;
+    caller = args.caller
+    cwModel = CwModel("infra_metric", caller);
     metrics = cwModel.getMetrics();
     calleeWiseSegregatedMetrics = getCalleeWiseSegregateMetrics(metrics['Metrics']);
     for callee in calleeWiseSegregatedMetrics :
@@ -164,11 +196,13 @@ if __name__ == "__main__":
             svErrStatusStats = [];
 
         successPercentageStats = generateSuccessPercentageStats(okStatusStats, clErrStatusStats, svErrStatusStats);
-        plt.plot(successPercentageStats["x"],successPercentageStats["y"], label=callee);
+        plt.plot(successPercentageStats["x"],successPercentageStats["y"], label=(callee + " (avg success " + str(successPercentageStats["avg"]) + ")"));
         axes = plt.gca();
         axes.set_ylim([-0.1,1.1]);
     plt.legend();
-    plt.savefig('plot.png');
+    filename = getFileNameToSave(caller, datetime.datetime.now())
+    plt.savefig(filename);
     # plt.show();
 
-    print(str(metrics));
+    # print(str(metrics));
+    sys.exit();
