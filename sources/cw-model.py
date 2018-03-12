@@ -3,6 +3,7 @@ import datetime
 import matplotlib.pyplot as plt
 import argparse
 import sys
+import ses_utils2 as SES
 
 DIM_ENV_NAME="environment";
 DIM_ENV_VALUE="infra.mindtickle.com";
@@ -202,7 +203,9 @@ if __name__ == "__main__":
     plt.legend();
     filename = getFileNameToSave(caller, datetime.datetime.now())
     plt.savefig(filename);
+    ses = SES.SESClient();
+    ses.send_email("utkarsh.c@mindtickle.com", ["utkarsh.c@mindtickle.com","arpit.goyal@mindtickle.com","sumit.jha@mindtickle.com"], "the subject", "", [filename]);
     # plt.show();
 
     # print(str(metrics));
-    sys.exit();
+    # sys.exit();
